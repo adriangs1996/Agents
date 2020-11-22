@@ -30,6 +30,8 @@ class CellContent(Enum):
     RobotWithDirt = 9
     RobotInCellWithKid = 10
     RobotInCorralWithKid = 11
+    RobotCarryingKidInCorral = 12
+    RobotInCorral = 13
 
 
 class Environment:
@@ -117,6 +119,8 @@ class Environment:
             or cell == CellContent.RobotWithKid
             or cell == CellContent.RobotInCellWithKid
             or cell == CellContent.RobotInCorralWithKid
+            or cell == CellContent.RobotCarryingKidInCorral
+            or cell == CellContent.RobotInCorral
         )
 
     @property
