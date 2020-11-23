@@ -60,14 +60,14 @@ class Environment:
         obstacles = obstaclesPercent * self.totalArea // 100
 
         # Place corral first because it need to be in connected form
-        self._generateCorral(kids, N, M)
+        self.__generateCorral(kids, N, M)
 
         # Place dirty cells
-        self._initCellContent(dirtiness, CellContent.Dirt, N, M)
+        self.__initCellContent(dirtiness, CellContent.Dirt, N, M)
         # Place obstacles
-        self._initCellContent(obstacles, CellContent.Obstacle, N, M)
+        self.__initCellContent(obstacles, CellContent.Obstacle, N, M)
         # Place kids
-        self._initCellContent(kids, CellContent.Kid, N, M)
+        self.__initCellContent(kids, CellContent.Kid, N, M)
 
     def __getitem__(self, coords: Tuple[int, int]):
         x, y = coords
@@ -124,13 +124,16 @@ class Environment:
         )
 
     @property
+    def Dirtiness(self):
+        return len(self.Dirt) * 100 // self.EmptyCells
+
+    @property
     def EmptyCells(self):
         return sum(1 for row in self.area for cell in row if cell == CellContent.Empty)
 
     @property
     def IsClean(self):
-        dirtiness = len(self.Dirt) * 100 // self.totalArea
-        return dirtiness < 60
+        return self.Dirtiness < 60
 
     @property
     def JobDone(self):
@@ -141,7 +144,7 @@ class Environment:
 
     # PRIVATE METHODS
 
-    def _initCellContent(self, count: int, cellType: CellContent, n: int, m: int):
+    def __initCellContent(self, count: int, cellType: CellContent, n: int, m: int):
         if self.EmptyCells < count:
             raise Exception(f"Cannot place {count} {cellType}")
 
@@ -153,7 +156,7 @@ class Environment:
             elif self[x, y] == CellContent.Corral and cellType == CellContent.Kid:
                 self[x, y] = CellContent.KidInCorral
 
-    def _generateCorral(self, count: int, n: int, m: int):
+    def __generateCorral(self, count: int, n: int, m: int):
         x, y = randint(n, m), randint(n, m)
         while self[x, y] != CellContent.Empty:
             x, y = randint(n, m), randint(n, m)
@@ -171,7 +174,7 @@ class Environment:
         if count:
             raise Exception("Not enough room for corral.")
 
-    def _moveObstacleFrom(self, pos1: Tuple[int, int], currentPos: Tuple[int, int]):
+    def __moveObstacleFrom(self, pos1: Tuple[int, int], currentPos: Tuple[int, int]):
         xdir, ydir = currentPos[0] - pos1[0], currentPos[1] - pos1[1]
         x, y = currentPos
         nextPos = x + xdir, y + ydir
@@ -185,9 +188,9 @@ class Environment:
         if self[pos1] == CellContent.Kid or CellContent.RobotInCellWithKid:
             self[currentPos] = CellContent.Empty
 
-        self._moveObstacleFrom(currentPos, (x + xdir, y + ydir))
+        self.__moveObstacleFrom(currentPos, (x + xdir, y + ydir))
 
-    def _canMoveObstacleFrom(self, pushedFrom: Tuple[int, int], pos: Tuple[int, int]):
+    def __canMoveObstacleFrom(self, pushedFrom: Tuple[int, int], pos: Tuple[int, int]):
         x1, y1 = pushedFrom
         x, y = pos
         # Compute the direction vector (arrow - origin)
@@ -196,23 +199,23 @@ class Environment:
         if self[x + xdir, y + ydir] == CellContent.Empty:
             return True
         elif self[x + xdir, y + ydir] == CellContent.Obstacle:
-            return self._canMoveObstacleFrom(pos, (x + xdir, y + ydir))
+            return self.__canMoveObstacleFrom(pos, (x + xdir, y + ydir))
         else:
             return False
 
-    def _canMoveKidTo(self, kidPos: Tuple[int, int]):
+    def __canMoveKidTo(self, kidPos: Tuple[int, int]):
         positions = [kidPos]
         for pos in around(kidPos):
             if self[pos] == CellContent.Empty:
                 positions.append(pos)
-            elif self[pos] == CellContent.Obstacle and self._canMoveObstacleFrom(
+            elif self[pos] == CellContent.Obstacle and self.__canMoveObstacleFrom(
                 kidPos, pos
             ):
                 positions.append(pos)
         return positions
 
     def _playKid(self, kidPos: Tuple[int, int]):
-        positions = self._canMoveKidTo(kidPos)
+        positions = self.__canMoveKidTo(kidPos)
         nextPos = choice(positions)
 
         if nextPos != kidPos:
@@ -221,13 +224,13 @@ class Environment:
                 self[nextPos] = CellContent.Kid
                 self[kidPos] = CellContent.Empty
             elif self[nextPos] == CellContent.Obstacle:
-                self._moveObstacleFrom(kidPos, nextPos)
+                self.__moveObstacleFrom(kidPos, nextPos)
                 self[kidPos] = CellContent.Empty
                 self[nextPos] = CellContent.Kid
 
         return nextPos
 
-    def _generateGarbage(self, center: Tuple[int, int]):
+    def __generateGarbage(self, center: Tuple[int, int]):
         square = around(center)
         kidsInSquare = len(list(filter(lambda kid: kid in square, self.Kids)))
 
@@ -249,7 +252,7 @@ class Environment:
         for kid in self.Kids:
             newKidPos = self._playKid(kid)
             if newKidPos != kid:
-                self._generateGarbage(kid)
+                self.__generateGarbage(kid)
 
     def randomChange(
         self, N: int, M: int, dirtinessPercent: int, obstaclesPercent: int, kids: int
@@ -266,11 +269,11 @@ class Environment:
         obstacles = obstaclesPercent * self.totalArea // 100
 
         # Place corral first because it need to be in connected form
-        self._generateCorral(kids, N, M)
+        self.__generateCorral(kids, N, M)
 
         # Place dirty cells
-        self._initCellContent(dirtiness, CellContent.Dirt, N, M)
+        self.__initCellContent(dirtiness, CellContent.Dirt, N, M)
         # Place obstacles
-        self._initCellContent(obstacles, CellContent.Obstacle, N, M)
+        self.__initCellContent(obstacles, CellContent.Obstacle, N, M)
         # Place kids
-        self._initCellContent(kids, CellContent.Kid, N, M)
+        self.__initCellContent(kids, CellContent.Kid, N, M)
