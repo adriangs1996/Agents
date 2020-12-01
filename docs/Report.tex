@@ -1,0 +1,151 @@
+\documentclass[a4paper, 12pt]{article}
+    % General Document formatting
+    \usepackage[margin=0.7in]{geometry}
+    \usepackage[parfill]{parskip}
+    \usepackage[utf8]{inputenc}
+    \usepackage{graphicx}
+    \usepackage{amsthm}
+    \usepackage{amsmath}
+    \usepackage{mathtools}
+
+\newtheorem{mydef}{Definici\'on}
+\newtheorem{mytheo}{Teorema}
+
+\begin{document}
+\title{Proyecto de Simulaci\'on: Agentes}
+\author{
+   Adrian Gonz\'alez S\'anchez C412\\
+   \texttt{https://github.com/adriangs1996}
+}
+\maketitle
+\section*{Orientaci\'on}
+\paragraph{}
+Se tiene un ambiente, representado por un tablero rectangular de tamaño
+N×M, con el que interact\'ua un agente. Las acciones que realizan los agentes
+ocurren por turnos. En un turno, los agentes realizan sus acciones, una sola
+por cada agente, y modifican el medio. En el siguiente, el ambiente puede
+variar. Si es el momento de cambio del ambiente, ocurre primero el cambio
+natural del ambiente y luego la variaci\'on aleatoria. En una unidad de tiempo
+ocurren el turno del agente y el turno de cambio del ambiente. Los elementos
+que pueden existir en el ambiente son obst\'aculos, suciedad, niños, el corral y
+los agentes que son llamados Robots de Casa. El Robot de Casa parte de un
+posici\'on aleatoria y es el el que realiza el primer turno. Igual, se especifica
+el valor del tiempo de unidades de cambio (t).
+
+\paragraph{}
+El objetivo del Robot de Casa es mantener la casa (a.k.a el ambiente)
+limpia. Se considera la casa limpia si el 60\% de las casillas vac\'ias no est\'an
+sucias. Se sabe que si la casa llega al 60\% de casillas sucias el Robot es
+despedido e inmediatamente cesa la simulación. Si el Robot ubica a todos
+los niños en el corral y el 100\% de las casillas est\'an limpias tambi\'en cesa
+la simulaci\'on. Estos son llamados estados finales. En caso de que no se
+logre uno de los estados finales del ambiente, la simulación debe detenerse
+cuando hayan transcurrido 100 veces t. Debe programar el comportamiento
+del robot por cada turno as\'i como las posibles variaciones del ambiente.
+
+\section*{Consideraciones}
+
+El ambiente es una matriz de casillas, y los posibles elementos que pueden existir
+en las casillas son: robot, niño, obst\'aculo, suciedad y corral. Se permite tambi\'en que coexistan
+varios elementos en una misma casilla, por ejemplo, pueden existir un niño en un corral, el robot puede
+estar en una misma casilla con un niño y un corral, el robot puede coexistir con una basura, y puede que el
+robot cargue un niño y en ese momento se encuentre en una casilla con una basura o una suciedad. El ambiente
+es din\'amico y el robot en todo momento tiene acceso a la informaci\'on completa sobre el ambiente.
+
+Dada la naturaleza din\'amica del ambiente, el agente que se implementa es reactivo; aprovecha el conocimiento
+del ambiente para tomar una decis\'on de qu\'e hacer en cada turno. La idea es que el robot nunca vaga sin objetivo
+por el ambiente, siempre tiene un prop\'osito, o bien intenta reducir la suciedad del ambiente, o bien intenta llevar a un niño
+al corral. Exactamente cu\'ando limpia y cu\'ando lleva un niño, es la diferencia de implementaci\'on del agente.
+
+El ambiente tiene 3 estados:
+\begin{enumerate}
+  \item Menos del 60\% de las casillas vac\'ias est\'an sucias, o hay alg\'un niño fuera de corral.
+  \item Mas del 60\% de las casillas vac\'ias est\'an sucias (Estado final).
+  \item No hay suciedad y todos los niños est\'an en el corral (Estado final). 
+\end{enumerate}
+
+El robot prioriza nunca llegar al estado 2, pues en este caso se considera como fallo, aunque tambi\'en intenta llegar
+al estado 3, pues es el caso ideal de su funcionamiento.
+
+\section*{Agente: Always deliver}
+Este agente intenta llegar lo m\'as r\'apido posible al estado 3, intentando de forma greedy llevar los niños al corral,
+mientras la suciedad no sobrepase un umbral definido. Este robot una vez que carga un niño, no lo suelta hasta que no lo
+ubica en un corral.
+\begin{enumerate}
+  \item Si carga niño y est\'a en un corral $\implies$ soltar al niño.
+  \item Si carga un niño $\implies$ moverse en direcci\'on al corral m\'as cercano.
+  \item Si no carga un niño y est\'a en una celda con suciedad $\implies$ limpiar.
+  \item Si suciedad $<$ threshold y en celda con niño suelto $\implies$ coger al niño.
+  \item Si suciedad $<$ threshold $\implies$ moverse en direcci\'on al niño m\'as cercano.
+  \item Si suciedad $\ge$ threshold $\implies$ moverse en direcci\'on a la suciedad m\'as cercana.
+\end{enumerate}
+
+\section*{Agente: Try to deliver if not dirty}
+Este agente utiliza reglas muy parecidas al anterior, la diferencia es que una vez que toma una decisi\'on, esta
+puede variar, o sea, si carga un niño, y en su camino al corral, el nivel de suciedad sobrepasa el umbral, entonces
+suelta al niño, e intenta limpiar; quiere decir que este prioriza mantenerse en el estado 1 y si puede, intenta llegar
+al estado 3. Visto de un modo simplista, este robot intenta no perder, mientras que el otro intenta siempre ganar.
+
+\begin{enumerate}
+  \item Si suciedad $\ge$ threshold y carga niño $\implies$ soltar niño.
+  \item Si suciedad $\ge$ threshold y suciedad en celda actual $\implies$ limpiar.
+  \item Si suciedad $\ge$ threshold $\implies$ moverse en direcci\'on a la basura m\'as cercana.
+  \item Si carga niño y est\'a en un corral $\implies$ soltar al niño.
+  \item Si suciedad $<$ threshold y en celda con niño suelto $\implies$ coger al niño.
+  \item Si suciedad $<$ threshold $\implies$ moverse en direcci\'on al niño m\'as cercano.
+\end{enumerate}
+
+\section*{Implementaci\'on}
+La simulacion consta de 3 m\'odulos: \textbf{environment.py, robot.py, house.py}. El ambiente se representa en 
+la clase Environment, el cual recibe par\'ametros como la cantidad de niños, porciento de obst\'aculos, porciento de
+suciedad y dimensiones. Este ambiente se genera autom\'aticamente y de forma aleatoria, garantizando en cada momento
+que se cumplan las restricciones del ambiente. Esta inicializaci\'on es b\'asicamente el llenado de una matriz de celdas
+cuyo contenido es especificado en la clase CellContent, que es un enum con los posibles valores que puede tomar una celda.
+
+Adem\'as el ambiente es responsable de emular sus propios cambios, o sea, mover los niños, generar la suciedad, etc. Y cada
+cierto per\'iodo de tiempo, todo se reordena utilizando el mismo m\'etodo de inicializaci\'on aleatorio. El ambiente es capaz
+de reportar la posici\'on de todos sus elementos, d\'igase robot, niños, basuras, corrales, etc.
+
+El agente, o en este caso el robot, se implementa con la clase \textbf{Robot}, la cual es la encargada de encapsular las posibles
+acciones que puede tomar el robot (moverse, soltar un niño, cargar un niño, limpiar). Principal en esta clase es el m\'etodo
+\textbf{evalEnvironment} el cual percibe el ambiente y decide que plan seguir; es este m\'etodo el que distingue a un agente de otro.
+
+
+la simulaci\'on ocurre en el m\'odulo house.py, donde se corren con el m\'etodo \textbf{testRobot} simulaciones sobre un robot
+espec\'ifico.
+
+\section*{Resultados}
+Luego de correr las 30 simulaciones en 10 escenarios, obtenemos los siguientes
+promedios para cada agente:
+
+\begin{table}[h!]
+  \begin{center}
+    \caption{Agentes}
+    \label{tab:table1}
+    \begin{tabular}{l|c|c|c} % <-- Alignments: 1st column left, 2nd middle and 3rd right, with vertical lines in between
+      \textbf{Agente} & \textbf{\'Exito} & \textbf{Despido} & \textbf{Normal}\\
+      \hline
+      1 & 48 & 6 & 46\\
+      2 & 4 & 15 & 83\\
+    \end{tabular}
+  \end{center}
+\end{table}
+
+Este resultado es intuitivo, por la forma en que se disponen las reglas, el agente 2 siempre
+intenta permanecer en un estado neutral, mientras que el primero es m\'as osado, intentando llevar
+los niños a su destino. Tambi\'en se pudo comprobar que el primer agente es mucho m\'as efectivo cuando
+el entorno es grande y la cantidad de niños desminuye, pues cada niño que el robot logre cargar
+es uno menos ensuciando, y al ser un entorno grande, el porciento de suciedad que aumenta en cada
+turno es pequeño, lo que hace la estrategia greedy viable. Por otro lado, en ambientes con muchos niños, o
+en entornos pequeños, es preferible el agente m\'as consevador, que si bien es cierto que no llega con frecuencia
+al estado final, tambi\'en se mantiene en un promedio del 83\% de los casos en un estado neutral, mientras que 
+el n\'umero de despidos del agente 1 aumenta.
+
+En un ambiente altamente din\'amico como este, al parecer el mejor modelo ser\'ia un h\'ibrido
+de estos agentes, donde se tenga en cuenta a la hora de planear una estrategia, el porciento de basura
+que representa recoger a un niño en una posici\'on determinada, y por supuesto, como asumimos que el movimiento
+de los niños es aleatorio, no podemos hacer predicciones precisas de hacia donde se dirigen, por lo que un modelo
+de este tipo deber\'ia lidiar con decisiones diferentes en cada turno y potencialmente nunca llevar a cabo ning\'un plan.
+Quiz\'as una mejor idea sea hacer esta valoraci\'on cuando el robot carga el niño, y en ese momento decidir no solo en base
+al nivel de suciedad actual, sino tambien al posible aumento de suciedad en su trayecto hacia el corral m\'as cercano.
+\end{document}

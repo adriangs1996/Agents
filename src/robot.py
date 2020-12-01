@@ -1,25 +1,23 @@
+from enum import Enum
 from typing import List, Tuple
-from environment import around, Environment, CellContent
-from math import acos, inf
-
-
-LEFT = 0, -1
-RIGHT = 0, 1
-UP = -1, 0
-DOWN = 1, 0
-UPRIGHT = -1, 1
-UPLEFT = -1, -1
-DOWNLEFT = 1, -1
-DOWNRIGHT = 1, 1
+from .environment import around, Environment, CellContent
+from math import inf
 
 CLEAN = "Clean"
 HUNTKID = "Hunt"
 DELIVER = "Deliver"
 
 
+class Action(Enum):
+    Clean = 0
+    Hunt = 1
+    Deliver = 2
+
+
 class Robot:
     def __init__(self, environment: Environment) -> None:
         self.environment = environment
+        self.__clean_forever = False
 
     @property
     def RobotState(self):
@@ -31,48 +29,53 @@ class Robot:
         return robot in (
             CellContent.RobotWithKid,
             CellContent.RobotCarryingKidInCorral,
+            CellContent.RobotWithKidInDirt,
         )
 
     def __deliver(self, count=2):
         if count == 0:
             return
         x, y, _ = self.RobotState
-        _, d, path = self.__getDistanceToGoal((x,y), CellContent.Corral)
+        _, d, path = self.__getDistanceToGoal((x, y), CellContent.Corral)
         if d == inf:
-            print("Corral unreacheable")
+            self.__clean_forever = True
+            self.drop()
         elif d == 0:
             self.drop()
         else:
-            xdir, ydir = path[0][0] - x, path[0][0] - y
+            xdir, ydir = path[0][0] - x, path[0][1] - y
             self.move((xdir, ydir))
             self.__deliver(count - 1)
-    
+
     def __moveTowardsClosestDirt(self):
         x, y, _ = self.RobotState
-        _, d, path = self.__getDistanceToGoal((x,y), CellContent.Dirt)
+        _, d, path = self.__getDistanceToGoal((x, y), CellContent.Dirt)
         if d == inf:
-            print("Dirt unreacheable")
+            pass
         elif d == 0:
             self.clean()
+            self.__clean_forever = False
         else:
-            xdir, ydir = path[0][0] - x, path[0][0] - y
+            xdir, ydir = path[0][0] - x, path[0][1] - y
             self.move((xdir, ydir))
 
     def __moveTowardsClosestKid(self):
         x, y, _ = self.RobotState
-        _, d, path = self.__getDistanceToGoal((x,y), CellContent.Kid)
+        _, d, path = self.__getDistanceToGoal((x, y), CellContent.Kid)
         if d == inf:
-            print("Kid unreacheable")
+            self.__clean_forever = True
         elif d == 1:
-            xdir, ydir = path[0][0] - x, path[0][0] - y
+            xdir, ydir = path[0][0] - x, path[0][1] - y
             self.move((xdir, ydir))
             self.carry()
         else:
-            xdir, ydir = path[0][0] - x, path[0][0] - y
+            xdir, ydir = path[0][0] - x, path[0][1] - y
+
             self.move((xdir, ydir))
 
-
-    def __getDistanceToGoal(self, origin: Tuple[int, int], goal: CellContent):
+    def __getDistanceToGoal(
+        self, origin: Tuple[int, int], goal: CellContent
+    ):
         # Simple BFS searching for goal.
         # This search is always made by the robot,
         # so valid cells to move does not include obstacles.
@@ -86,33 +89,37 @@ class Robot:
         if goal == CellContent.Corral:
             target.append(CellContent.RobotCarryingKidInCorral)
 
+        visited = {}
+
         while queue:
             pos, d, path = queue.pop(0)
+            visited[pos] = True
             if self.environment[pos] in target:
                 return pos, d, path
             for nextPos in around(pos):
-                if self.environment[nextPos] in (
-                    CellContent.Empty,
-                    CellContent.Corral,
-                    CellContent.Dirt,
-                    CellContent.KidInCorral,
-                ):
-                    queue.append((nextPos, d + 1, path + [nextPos]))
+                # If carrying
+                if self.RobotIsCarryingKid:
+                    if (
+                        self.environment[nextPos]
+                        in (
+                            CellContent.Empty,
+                            CellContent.Corral,
+                            CellContent.Dirt,
+                        )
+                        and not visited.get(nextPos, False)
+                    ):
+                        queue.append((nextPos, d + 1, path + [nextPos]))
+                else:
+                    if self.environment[nextPos] in (
+                        CellContent.Empty,
+                        CellContent.Corral,
+                        CellContent.Dirt,
+                        CellContent.KidInCorral,
+                        CellContent.Kid,
+                        CellContent.RobotWithDirt,
+                    ) and not visited.get(nextPos, False):
+                        queue.append((nextPos, d + 1, path + [nextPos]))
         return origin, inf, []
-
-    def __findBestKid(self):
-        rx, ry, _ = self.RobotState
-
-        d = inf
-        k = (-1, -1)
-
-        for kid in self.environment.Kids:
-            pos, d1, _ = self.__getDistanceToGoal((rx, ry), self.environment[kid])
-            _, d2, _ = self.__getDistanceToGoal(pos, CellContent.Corral)
-            if d1 + d2 < d:
-                k = pos
-                d = d1 + d2
-        return k
 
     def __evalEnvironment(self):
         # Robot should prioritize not to get fired
@@ -123,12 +130,16 @@ class Robot:
         # kid.
 
         if not self.RobotIsCarryingKid:
-            if self.environment.Dirtiness >= 30:
-                return CLEAN
+            if (
+                self.environment.Dirtiness >= 40
+                or len(self.environment.Kids) == 0
+                or self.__clean_forever
+            ):
+                return Action.Clean
             else:
-                return HUNTKID
+                return Action.Hunt
         else:
-            return DELIVER
+            return Action.Deliver
 
     def __moveToNextCell(self, nextPos: Tuple[int, int]):
         # Robot is moving alone
@@ -144,6 +155,8 @@ class Robot:
                 self.environment[nextPos] = CellContent.RobotInCellWithKid
             elif self.environment[nextPos] == CellContent.Corral:
                 self.environment[nextPos] = CellContent.RobotInCorral
+            elif self.environment[nextPos] == CellContent.KidInCorral:
+                self.environment[nextPos] = CellContent.RobotInCorralWithKid
 
         # Robot is moving with kid
         else:
@@ -152,12 +165,17 @@ class Robot:
                 self.environment[nextPos] = CellContent.RobotWithKid
             elif self.environment[nextPos] == CellContent.Corral:
                 self.environment[nextPos] = CellContent.RobotCarryingKidInCorral
+            elif self.environment[nextPos] == CellContent.Dirt:
+                self.environment[nextPos] = CellContent.RobotWithKidInDirt
 
     def move(self, direction: Tuple[int, int]):
         x, y, cellType = self.RobotState
         xdir, ydir = direction
+        if (xdir, ydir) == (0, 0):
+            return
         nextCell = self.environment[x + xdir, y + ydir]
         if nextCell != CellContent.NotACell:
+
             self.__moveToNextCell((x + xdir, y + ydir))
 
             # Update the old cell
@@ -172,45 +190,41 @@ class Robot:
                 self.environment[x, y] = CellContent.Kid
             elif cellType == CellContent.RobotInCorralWithKid:
                 self.environment[x, y] = CellContent.KidInCorral
-        else:
-            print("Robot cannot move in that direction")
+            elif cellType == CellContent.RobotWithDirt:
+                self.environment[x, y] = CellContent.Dirt
+            elif self.environment[x, y] == CellContent.RobotWithKidInDirt:
+                self.environment[x, y] = CellContent.Dirt
+        
 
     def carry(self):
         x, y, cellType = self.RobotState
         if cellType != CellContent.RobotInCellWithKid:
-            print("No kid to carry in this cell.")
+            pass
         else:
             self.environment[x, y] = CellContent.RobotWithKid
-            self.position = x, y, CellContent.RobotWithKid
-        return self.position
 
     def drop(self):
         x, y, cellType = self.RobotState
         if cellType == CellContent.RobotWithKid:
             self.environment[x, y] = CellContent.RobotInCellWithKid
-            self.position = x, y, CellContent.RobotInCellWithKid
         elif cellType == CellContent.RobotCarryingKidInCorral:
             self.environment[x, y] = CellContent.RobotInCorralWithKid
-            self.position = x, y, CellContent.RobotInCorralWithKid
         else:
-            print("Robot is not carrying any kid.")
-        return self.position
+            pass
 
     def clean(self):
         x, y, cellType = self.RobotState
         if cellType != CellContent.RobotWithDirt:
-            print("No dirt to clean.")
+            pass
         else:
             self.environment[x, y] = CellContent.Robot
-            self.position = x, y, CellContent.Robot
-        return self.position
 
     def decide(self):
         action = self.__evalEnvironment()
 
-        if action == CLEAN:
+        if action == Action.Clean:
             self.__moveTowardsClosestDirt()
-        elif action == HUNTKID:
+        elif action == Action.Hunt:
             self.__moveTowardsClosestKid()
         else:
             self.__deliver()

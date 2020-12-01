@@ -17,6 +17,16 @@ def around(pos: Tuple[int, int]) -> List[Tuple[int, int]]:
     ]
 
 
+def kidAround(pos: Tuple[int, int]) -> List[Tuple[int, int]]:
+    x, y = pos
+    return [
+        (x + 1, y),
+        (x, y + 1),
+        (x, y - 1),
+        (x - 1, y),
+    ]
+
+
 class CellContent(Enum):
     Empty = 0
     Kid = 1
@@ -32,6 +42,25 @@ class CellContent(Enum):
     RobotInCorralWithKid = 11
     RobotCarryingKidInCorral = 12
     RobotInCorral = 13
+    RobotWithKidInDirt = 14
+
+
+TOSTR = {
+    CellContent.Empty: "___",
+    CellContent.Kid: "_K_",
+    CellContent.Robot: "_R_",
+    CellContent.Dirt: "_D_",
+    CellContent.Obstacle: "_O_",
+    CellContent.Corral: "_C_",
+    CellContent.KidInCorral: "KC_",
+    CellContent.RobotWithKid: "RK_",
+    CellContent.RobotWithDirt: "RD_",
+    CellContent.RobotInCellWithKid: "R&K",
+    CellContent.RobotInCorralWithKid: "RCK",
+    CellContent.RobotCarryingKidInCorral: "RKC",
+    CellContent.RobotInCorral: "RC_",
+    CellContent.RobotWithKidInDirt: "RKD",
+}
 
 
 class Environment:
@@ -46,39 +75,52 @@ class Environment:
     ):
         # Create an empty area
         self.area: List[List[CellContent]] = [
-            [CellContent.Empty for _ in range(N)] for _ in range(M)
+            [CellContent.Empty for _ in range(M)] for _ in range(N)
         ]
 
         # Place robot
-        x, y = randint(N, M), randint(N, M)
+        x, y = randint(0, N - 1), randint(0, M - 1)
         self[x, y] = CellContent.Robot
 
         self.totalArea = N * M
         self.t = timeToChange
-        # Compute amount of dirt needed
-        dirtiness = dirtinessPercent * self.totalArea // 100
-        obstacles = obstaclesPercent * self.totalArea // 100
 
         # Place corral first because it need to be in connected form
         self.__generateCorral(kids, N, M)
 
-        # Place dirty cells
-        self.__initCellContent(dirtiness, CellContent.Dirt, N, M)
-        # Place obstacles
-        self.__initCellContent(obstacles, CellContent.Obstacle, N, M)
         # Place kids
         self.__initCellContent(kids, CellContent.Kid, N, M)
+
+        # Compute amount of dirt needed
+
+        obstacles = obstaclesPercent * self.EmptyCells // 100
+
+        # Place obstacles
+        self.__initCellContent(obstacles, CellContent.Obstacle, N, M)
+
+        # Place dirty cells
+        dirtiness = dirtinessPercent * self.EmptyCells // 100
+        self.__initCellContent(dirtiness, CellContent.Dirt, N, M)
 
     def __getitem__(self, coords: Tuple[int, int]):
         x, y = coords
         try:
+            if x < 0 or y < 0:
+                raise IndexError
             return self.area[x][y]
         except IndexError:
             return CellContent.NotACell
 
     def __setitem__(self, coords: Tuple[int, int], val: CellContent):
         x, y = coords
+        assert x >= 0 and y >= 0
         self.area[x][y] = val
+
+    def __str__(self) -> str:
+        result = ""
+        for row in self.area:
+            result += " ".join(TOSTR[x] for x in row) + "\n"
+        return result
 
     # PROPERTIES
 
@@ -106,26 +148,34 @@ class Environment:
             (x, y, cell)
             for x, row in enumerate(self.area)
             for y, cell in enumerate(row)
-            if cell == CellContent.Dirt or cell == CellContent.RobotWithDirt
+            if cell == CellContent.Dirt
+            or cell == CellContent.RobotWithDirt
+            or cell == CellContent.RobotWithKidInDirt
         ]
 
     @property
     def Robot(self) -> Tuple[int, int, CellContent]:
-        return next(
-            (x, y, cell)
-            for x, row in enumerate(self.area)
-            for y, cell in enumerate(row)
-            if cell == CellContent.Robot
-            or cell == CellContent.RobotWithKid
-            or cell == CellContent.RobotInCellWithKid
-            or cell == CellContent.RobotInCorralWithKid
-            or cell == CellContent.RobotCarryingKidInCorral
-            or cell == CellContent.RobotInCorral
-        )
+        try:
+            return next(
+                (x, y, cell)
+                for x, row in enumerate(self.area)
+                for y, cell in enumerate(row)
+                if cell == CellContent.Robot
+                or cell == CellContent.RobotWithKid
+                or cell == CellContent.RobotInCellWithKid
+                or cell == CellContent.RobotInCorralWithKid
+                or cell == CellContent.RobotCarryingKidInCorral
+                or cell == CellContent.RobotInCorral
+                or cell == CellContent.RobotWithDirt
+                or cell == CellContent.RobotWithKidInDirt
+            )
+        except StopIteration:
+            exit()
 
     @property
     def Dirtiness(self):
-        return len(self.Dirt) * 100 // self.EmptyCells
+        total = len(self.Dirt) + self.EmptyCells
+        return len(self.Dirt) * 100 // total
 
     @property
     def EmptyCells(self):
@@ -149,17 +199,18 @@ class Environment:
             raise Exception(f"Cannot place {count} {cellType}")
 
         while count:
-            x, y = randint(n, m), randint(n, m)
+            x, y = randint(0, n - 1), randint(0, m - 1)
             if self[x, y] == CellContent.Empty:
                 count -= 1
                 self[x, y] = cellType
             elif self[x, y] == CellContent.Corral and cellType == CellContent.Kid:
+                count -= 1
                 self[x, y] = CellContent.KidInCorral
 
     def __generateCorral(self, count: int, n: int, m: int):
-        x, y = randint(n, m), randint(n, m)
+        x, y = randint(0, n - 1), randint(0, m - 1)
         while self[x, y] != CellContent.Empty:
-            x, y = randint(n, m), randint(n, m)
+            x, y = randint(0, n - 1), randint(0, m - 1)
 
         queue: List[Tuple[int, int]] = [(x, y)]
 
@@ -167,7 +218,7 @@ class Environment:
             x, y = queue.pop(0)
             count -= 1
             self[x, y] = CellContent.Corral
-            for i, j in around((x, y)):
+            for i, j in kidAround((x, y)):
                 if self[i, j] == CellContent.Empty:
                     queue.append((i, j))
 
@@ -205,7 +256,7 @@ class Environment:
 
     def __canMoveKidTo(self, kidPos: Tuple[int, int]):
         positions = [kidPos]
-        for pos in around(kidPos):
+        for pos in kidAround(kidPos):
             if self[pos] == CellContent.Empty:
                 positions.append(pos)
             elif self[pos] == CellContent.Obstacle and self.__canMoveObstacleFrom(
@@ -222,11 +273,17 @@ class Environment:
             # Kid's gonna move
             if self[nextPos] == CellContent.Empty:
                 self[nextPos] = CellContent.Kid
-                self[kidPos] = CellContent.Empty
+                if self[kidPos] == CellContent.RobotInCellWithKid:
+                    self[kidPos] = CellContent.Robot
+                else:
+                    self[kidPos] = CellContent.Empty
             elif self[nextPos] == CellContent.Obstacle:
                 self.__moveObstacleFrom(kidPos, nextPos)
-                self[kidPos] = CellContent.Empty
                 self[nextPos] = CellContent.Kid
+                if self[kidPos] == CellContent.RobotInCellWithKid:
+                    self[kidPos] = CellContent.Robot
+                else:
+                    self[kidPos] = CellContent.Empty
 
         return nextPos
 
@@ -257,23 +314,25 @@ class Environment:
     def randomChange(
         self, N: int, M: int, dirtinessPercent: int, obstaclesPercent: int, kids: int
     ):
-        self.area = [[CellContent.Empty for _ in range(N)] for _ in range(M)]
+        self.area = [[CellContent.Empty for _ in range(M)] for _ in range(N)]
 
         # Place robot
-        x, y = randint(N, M), randint(N, M)
+        x, y = randint(0, N - 1), randint(0, M - 1)
         self[x, y] = CellContent.Robot
 
         self.totalArea = N * M
-        # Compute amount of dirt needed
-        dirtiness = dirtinessPercent * self.totalArea // 100
-        obstacles = obstaclesPercent * self.totalArea // 100
 
         # Place corral first because it need to be in connected form
         self.__generateCorral(kids, N, M)
 
-        # Place dirty cells
-        self.__initCellContent(dirtiness, CellContent.Dirt, N, M)
-        # Place obstacles
-        self.__initCellContent(obstacles, CellContent.Obstacle, N, M)
         # Place kids
         self.__initCellContent(kids, CellContent.Kid, N, M)
+
+        # Place obstacles
+        obstacles = obstaclesPercent * self.EmptyCells // 100
+        self.__initCellContent(obstacles, CellContent.Obstacle, N, M)
+
+        # Place dirty cells
+        # Compute amount of dirt needed
+        dirtiness = dirtinessPercent * self.EmptyCells // 100
+        self.__initCellContent(dirtiness, CellContent.Dirt, N, M)
